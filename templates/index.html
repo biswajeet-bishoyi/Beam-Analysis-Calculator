@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Beam Analysis Calculator</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        label { display: inline-block; width: 150px; padding: 5px; }
+        input { padding: 5px; margin-bottom: 10px; width: 100px; }
+        .load-group { margin-bottom: 15px; }
+        #plots { margin-top: 30px; }
+        button { padding: 10px 20px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>Beam Analysis Calculator</h1>
+
+    <div>
+        <label>Beam Length (m):</label>
+        <input type="number" id="beamLength" value="10" min="1" max="100" step="0.1" />
+    </div>
+
+    <h3>Point Loads</h3>
+    <div id="pointLoads">
+        <div class="load-group">
+            <label>Magnitude (kN):</label>
+            <input type="number" class="pl-magnitude" value="5" step="0.1" />
+            <label>Position (m):</label>
+            <input type="number" class="pl-position" value="2" step="0.1" />
+        </div>
+    </div>
+    <button onclick="addPointLoad()">Add Point Load</button>
+    
+    <h3>Uniformly Distributed Loads (UDLs)</h3>
+    <div id="udls">
+        <div class="load-group">
+            <label>Magnitude (kN/m):</label>
+            <input type="number" class="udl-magnitude" value="2" step="0.1" />
+            <label>Start (m):</label>
+            <input type="number" class="udl-start" value="4" step="0.1" />
+            <label>End (m):</label>
+            <input type="number" class="udl-end" value="8" step="0.1" />
+        </div>
+    </div>
+    <button onclick="addUDL()">Add UDL</button>
+    
+    <br /><br />
+    <button onclick="analyzeBeam()">Analyze Beam</button>
+
+    <h2>Results</h2>
+    <p>Reaction at Left Support (Ra): <span id="Ra">-</span> kN</p>
+    <p>Reaction at Right Support (Rb): <span id="Rb">-</span> kN</p>
+
+    <div id="plots">
+        <div id="shearPlot" style="width: 100%; height: 400px;"></div>
+        <div id="momentPlot" style="width: 100%; height: 400px;"></div>
+    </div>
+
+<script>
+function addPointLoad() {
+    const container = document.getElementById("pointLoads");
+    const div = document.createElement("div");
+    div.className = "load-group";
+    div.innerHTML = `
+        <label>Magnitude (kN):</label>
+        <input type="number" class="pl-magnitude" value="0" step="0.1" />
+        <label>Position (m):</label>
+        <input type="number" class="pl-position" value="0" step="0.1" />
+        <button onclick="this.parentElement.remove()">Remove</button>
+    `;
+    container.appendChild(div);
+}
+
+function addUDL() {
+    const container = document.getElementById("udls");
+    const div = document.createElement("div");
+    div.className = "load-group";
+    div.innerHTML = `
+        <label>Magnitude (kN/m):</label>
+        <input type="number" class="udl-magnitude" value="0" step="0.1" />
+        <label>Start (m):</label>
+        <input type="number" class="udl-start" value="0" step="0.1" />
+        <label>End (m):</label>
+        <input type="number" class="udl-end" value="0" step="0.1" />
+        <button onclick="this.parentElement.remove()">Remove</button>
+    `;
+    container.appendChild(div);
+}
+
+async function analyzeBeam() {
+    const beamLength = parseFloat(document.getElementById("beamLength").value);
+
+    // Get point loads
+    const pl_mags = Array.from(document.querySelectorAll(".pl-magnitude")).map(i => parseFloat(i.value));
+    const pl_pos = Array.from(document.querySelectorAll(".pl-position")).map(i => parseFloat(i.value));
+    const point_loads = pl_mags.map((mag, i) => ({ magnitude: mag, position: pl_pos[i] }));
+
+    // Get UDLs
+    const udl_mags = Array.from(document.querySelectorAll(".udl-magnitude")).map(i => parseFloat(i.value));
+    const udl_starts = Array.from(document.querySelectorAll(".udl-start")).map(i => parseFloat(i.value));
+    const udl_ends = Array.from(document.querySelectorAll(".udl-end")).map(i => parseFloat(i.value));
+    const udls = udl_mags.map((mag, i) => ({ magnitude: mag, start: udl_starts[i], end: udl_ends[i] }));
+
+    const response = await fetch('/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ beam_length: beamLength, point_loads, udls })
+    });
+
+    const result = await response.json();
+
+    document.getElementById('Ra').textContent = result.Ra.toFixed(2);
+    document.getElementById('Rb').textContent = result.Rb.toFixed(2);
+
+    // Plot Shear Force
+    Plotly.newPlot('shearPlot', [{
+        x: result.x,
+        y: result.shear,
+        type: 'scatter',
+        mode: 'lines',
+        line: {color: 'blue'}
+    }], {
+        title: "Shear Force Diagram (kN)",
+        xaxis: { title: "Position along beam (m)" },
+        yaxis: { zeroline: true }
+    });
+
+    // Plot Bending Moment
+    Plotly.newPlot('momentPlot', [{
+        x: result.x,
+        y: result.moment,
+        type: 'scatter',
+        mode: 'lines',
+        line: {color: 'red'}
+    }], {
+        title: "Bending Moment Diagram (kNm)",
+        xaxis: { title: "Position along beam (m)" },
+        yaxis: { zeroline: true }
+    });
+}
+</script>
+</body>
+</html>
